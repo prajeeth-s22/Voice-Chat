@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceBot - Speech Recognition & Deep Learning</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>VOICEBOT</h1>
+        <p class="subtitle">Speech Recognition + Deep Learning</p>
+    </header>
+
+    <main class="chat-container">
+        <div class="chat-card">
+            <div class="mic-container">
+                <button id="mic-btn" class="mic-btn" aria-label="Microphone">🎤</button>
+            </div>
+            <div class="status-indicator">
+                <span id="status-text">Ready</span>
+            </div>
+
+            <div class="io-section">
+                <div class="input-section">
+                    <h3>Recognized Speech</h3>
+                    <div id="recognized-speech" class="display-area placeholder">Your speech will appear here...</div>
+                    
+                    <div class="fallback-input">
+                        <input type="text" id="text-input" placeholder="Or type your message here...">
+                        <button id="send-btn" class="send-btn">Send</button>
+                    </div>
+                </div>
+
+                <div class="output-section">
+                    <h3>Chatbot Response</h3>
+                    <div class="response-wrapper">
+                        <div id="chatbot-response" class="display-area placeholder">Response will appear here...</div>
+                        <button id="tts-btn" class="tts-btn" aria-label="Read out loud" disabled>🔊</button>
+                    </div>
+                    
+                    <div class="metadata-bar">
+                        <span class="metadata-label">Intent:</span>
+                        <span id="intent-badge" class="badge intent-badge">N/A</span>
+                        <span class="metadata-label">Confidence:</span>
+                        <span id="confidence-badge" class="badge confidence-badge">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="about-section">
+            <h2>Project Architecture</h2>
+            <p>End-to-end pipeline from voice input to response generation.</p>
+            <div class="architecture-flow">
+                <div class="flow-step">
+                    <span class="step-icon">🎙️</span>
+                    <span class="step-name">Speech Recognition</span>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-step">
+                    <span class="step-icon">📝</span>
+                    <span class="step-name">NLP</span>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-step">
+                    <span class="step-icon">🧠</span>
+                    <span class="step-name">Deep Learning</span>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-step">
+                    <span class="step-icon">💬</span>
+                    <span class="step-name">Response Gen</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>Voice-Enabled Chatbot using Speech Recognition & Deep Learning</p>
+    </footer>
+
+    <script src="/static/script.js" defer></script>
+</body>
+</html>
