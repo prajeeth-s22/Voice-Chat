@@ -30,6 +30,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from flask import Flask, render_template, request, jsonify
 import tensorflow as tf
 from tensorflow import keras
+from google import genai
+from google.genai import types
 import whisper
 import imageio_ffmpeg
 
@@ -40,6 +42,11 @@ app.config['JSON_SORT_KEYS'] = False
 
 # Confidence threshold — below this, return a low-confidence response
 CONFIDENCE_THRESHOLD = 0.35
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_SYSTEM_INSTRUCTION = (
+    'You are VoiceBot, a concise and helpful AI assistant. '
+    'Answer the user directly in plain text. Keep responses under 150 words.'
+)
 
 # Low-confidence fallback responses
 FALLBACK_RESPONSES = [
@@ -168,6 +175,40 @@ def predict_intent(text):
     }
 
 
+def generate_response(text):
+    """Use Gemini when configured, otherwise retain the local model response."""
+    local_result = predict_intent(text)
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        local_result['response_source'] = 'local_intent_model'
+        return local_result
+
+    try:
+        client = genai.Client(api_key=api_key)
+        gemini_result = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=text,
+            config=types.GenerateContentConfig(
+                system_instruction=GEMINI_SYSTEM_INSTRUCTION,
+                temperature=0.4,
+                max_output_tokens=250,
+            ),
+        )
+        reply = (gemini_result.text or '').strip()
+        if reply:
+            local_result['response'] = reply
+            local_result['response_source'] = 'gemini'
+            local_result['gemini_model'] = GEMINI_MODEL
+        else:
+            local_result['response_source'] = 'local_intent_model'
+    except Exception:
+        # Do not expose provider errors or credentials to the browser.
+        app.logger.exception('Gemini request failed; using the local response.')
+        local_result['response_source'] = 'local_intent_model'
+
+    return local_result
+
+
 # ─── Routes ───────────────────────────────────────────────────────────
 @app.route('/')
 def index():
@@ -207,7 +248,7 @@ def chat():
 
     # Predict intent and get response
     try:
-        result = predict_intent(message)
+        result = generate_response(message)
         return jsonify(result)
     except Exception as e:
         app.logger.error(f"Prediction error: {str(e)}")
@@ -264,7 +305,7 @@ def voice_chat():
             })
 
         # Predict intent using Keras model
-        result = predict_intent(transcribed_text)
+        result = generate_response(transcribed_text)
         result['stt_model'] = 'OpenAI Whisper (tiny.en)'
         return jsonify(result)
 
@@ -282,7 +323,8 @@ def health():
     return jsonify({
         'status': 'ok',
         'intent_model_loaded': model is not None,
-        'whisper_stt_loaded': whisper_model is not None
+        'whisper_stt_loaded': whisper_model is not None,
+        'gemini_enabled': bool(os.environ.get('GEMINI_API_KEY'))
     })
 
 

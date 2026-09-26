@@ -164,6 +164,22 @@ venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 ```
 
+### Optional: Gemini-generated replies
+
+The local intent model remains available as a fallback. To have Gemini produce
+the chatbot reply, create a new API key in Google AI Studio and set it outside
+the repository. Never commit the key or add it to frontend JavaScript.
+
+```powershell
+# Windows PowerShell: set for the current terminal, then start the app
+$env:GEMINI_API_KEY = "your-new-key"
+python app.py
+```
+
+For a deployment, add `GEMINI_API_KEY` in the host's environment-variable or
+secrets settings. Set `GEMINI_MODEL` only if you need a model other than the
+default `gemini-2.5-flash`.
+
 ---
 
 ## 🏋️ Training the Model

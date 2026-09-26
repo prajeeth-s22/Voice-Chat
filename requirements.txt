@@ -6,3 +6,4 @@ gunicorn==23.0.0
 matplotlib==3.10.1
 openai-whisper
 imageio-ffmpeg==0.6.0
+google-genai>=1.0.0
