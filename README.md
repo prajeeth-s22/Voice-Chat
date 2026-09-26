@@ -21,7 +21,7 @@ Open `http://127.0.0.1:5000` and permit microphone access.
 | Name | Required | Purpose |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | Gemini API key, configured only on the server or host. |
-| `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-2.5-flash`. |
+| `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-3.8-flash`. |
 
 Never place the API key in frontend JavaScript, commit it, or add it to
 `.env.example`. Configure it as a secret in Vercel or your hosting provider.

@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
 
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.8-flash')
 SYSTEM_INSTRUCTION = (
     'You are VoiceBot, a concise and helpful AI assistant. '
     'Answer the user directly in plain text and keep replies under 150 words.'
@@ -119,9 +119,11 @@ def chat():
         return jsonify(text_response(message))
     except RuntimeError as exc:
         return jsonify({'error': str(exc)}), 503
-    except Exception:
+    except Exception as exc:
         app.logger.exception('Gemini text request failed.')
-        return jsonify({'error': 'Gemini could not process the message. Please try again.'}), 502
+        status = getattr(exc, 'code', None) or getattr(exc, 'status_code', None)
+        detail = f' (provider status {status})' if status else ''
+        return jsonify({'error': f'Gemini could not process the message{detail}. Please try again.'}), 502
 
 
 @app.route('/voice-chat', methods=['POST'])
@@ -141,9 +143,11 @@ def voice_chat():
         return jsonify(voice_response(audio_bytes, mime_type))
     except RuntimeError as exc:
         return jsonify({'error': str(exc)}), 503
-    except Exception:
+    except Exception as exc:
         app.logger.exception('Gemini voice request failed.')
-        return jsonify({'error': 'Gemini could not process the recording. Please try again.'}), 502
+        status = getattr(exc, 'code', None) or getattr(exc, 'status_code', None)
+        detail = f' (provider status {status})' if status else ''
+        return jsonify({'error': f'Gemini could not process the recording{detail}. Please try again.'}), 502
 
 
 @app.route('/health')
