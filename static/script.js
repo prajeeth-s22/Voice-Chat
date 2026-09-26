@@ -77,12 +77,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isRecording = false;
         micBtn.classList.remove('listening');
-        statusText.textContent = 'Transcribing locally (OpenAI Whisper)...';
+        statusText.textContent = 'Sending recording to Gemini...';
         statusText.style.color = '#e0e0e0';
     }
 
     async function sendAudioToBackend(audioBlob) {
-        recognizedSpeechEl.textContent = 'Processing audio locally with Whisper STT...';
+        recognizedSpeechEl.textContent = 'Processing audio with Gemini...';
         recognizedSpeechEl.classList.add('placeholder');
         chatbotResponseEl.textContent = 'Thinking...';
         chatbotResponseEl.classList.add('placeholder');
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const confidence = data.confidence !== undefined ? (data.confidence * 100).toFixed(1) : 0;
             confidenceBadge.textContent = `${confidence}%`;
             
-            statusText.textContent = 'Response Generated (Local STT + DL Model)';
+            statusText.textContent = 'Response Generated (Gemini AI)';
             statusText.style.color = '#00ffcc';
             ttsBtn.disabled = false;
             
@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const confidence = data.confidence !== undefined ? (data.confidence * 100).toFixed(1) : 0;
             confidenceBadge.textContent = `${confidence}%`;
             
-            statusText.textContent = 'Response Generated (Local Intent Model)';
+            statusText.textContent = 'Response Generated (Gemini AI)';
             statusText.style.color = '#00ffcc';
             ttsBtn.disabled = false;
             
@@ -226,4 +226,3 @@ document.addEventListener('DOMContentLoaded', () => {
         window.speechSynthesis.getVoices();
     }
 });
-
