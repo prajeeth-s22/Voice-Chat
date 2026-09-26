@@ -9,7 +9,7 @@
 <body>
     <header class="app-header">
         <h1>VOICEBOT</h1>
-        <p class="subtitle">Speech Recognition + Deep Learning</p>
+        <p class="subtitle">Local Open-Source Speech Recognition (Whisper) + Deep Learning</p>
     </header>
 
     <main class="chat-container">
@@ -50,22 +50,22 @@
         </div>
 
         <section class="about-section">
-            <h2>Project Architecture</h2>
-            <p>End-to-end pipeline from voice input to response generation.</p>
+            <h2>Local Open-Source Pipeline</h2>
+            <p>100% local processing from microphone recording to response generation.</p>
             <div class="architecture-flow">
                 <div class="flow-step">
                     <span class="step-icon">🎙️</span>
-                    <span class="step-name">Speech Recognition</span>
+                    <span class="step-name">Local Mic Record</span>
                 </div>
                 <div class="flow-arrow">➔</div>
                 <div class="flow-step">
-                    <span class="step-icon">📝</span>
-                    <span class="step-name">NLP</span>
+                    <span class="step-icon">⚡</span>
+                    <span class="step-name">Whisper STT</span>
                 </div>
                 <div class="flow-arrow">➔</div>
                 <div class="flow-step">
                     <span class="step-icon">🧠</span>
-                    <span class="step-name">Deep Learning</span>
+                    <span class="step-name">Keras Intent Model</span>
                 </div>
                 <div class="flow-arrow">➔</div>
                 <div class="flow-step">
@@ -77,8 +77,9 @@
     </main>
 
     <footer class="app-footer">
-        <p>Voice-Enabled Chatbot using Speech Recognition & Deep Learning</p>
+        <p>Voice-Enabled Chatbot using Local OpenAI Whisper STT & TensorFlow/Keras</p>
     </footer>
+
 
     <script src="/static/script.js" defer></script>
 </body>

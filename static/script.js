@@ -10,80 +10,132 @@ document.addEventListener('DOMContentLoaded', () => {
     const intentBadge = document.getElementById('intent-badge');
     const confidenceBadge = document.getElementById('confidence-badge');
 
-    // Speech Recognition Setup
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition = null;
-    let isListening = false;
+    // Local Voice Recording (MediaRecorder) Setup
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
 
-    if (!SpeechRecognition) {
-        statusText.textContent = 'Speech Recognition API not supported in this browser.';
+    // Check microphone support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusText.textContent = 'Microphone API not supported in this browser.';
         statusText.style.color = 'red';
         micBtn.disabled = true;
     } else {
-        recognition = new SpeechRecognition();
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        recognition.continuous = false;
-
-        recognition.onstart = () => {
-            isListening = true;
-            statusText.textContent = 'Listening...';
-            micBtn.classList.add('listening');
-        };
-
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            recognizedSpeechEl.textContent = transcript;
-            recognizedSpeechEl.classList.remove('placeholder');
-            sendMessage(transcript);
-        };
-
-        recognition.onerror = (event) => {
-            console.error('Speech recognition error', event.error);
-            isListening = false;
-            micBtn.classList.remove('listening');
-            
-            let errorMsg = 'Error during recognition.';
-            if (event.error === 'not-allowed') {
-                errorMsg = 'Microphone permission denied.';
-            } else if (event.error === 'no-speech') {
-                errorMsg = 'No speech detected.';
-            } else if (event.error === 'network') {
-                errorMsg = 'Network error during recognition.';
-            }
-            
-            statusText.textContent = errorMsg;
-            setTimeout(() => {
-                if (!isListening) statusText.textContent = 'Ready';
-            }, 3000);
-        };
-
-        recognition.onend = () => {
-            isListening = false;
-            micBtn.classList.remove('listening');
-            if (statusText.textContent === 'Listening...') {
-                statusText.textContent = 'Processing...';
-            }
-        };
-
-        micBtn.addEventListener('click', () => {
-            if (isListening) {
-                recognition.stop();
+        micBtn.addEventListener('click', async () => {
+            if (isRecording) {
+                stopRecording();
             } else {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    console.error("Could not start recognition:", e);
-                }
+                startRecording();
             }
         });
     }
 
-    // Chat Function
+    async function startRecording() {
+        try {
+            audioChunks = [];
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            mediaRecorder = new MediaRecorder(stream);
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                // Stop all microphone audio tracks
+                stream.getTracks().forEach(track => track.stop());
+                
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                
+                if (audioBlob.size < 100) {
+                    statusText.textContent = 'Recording too short.';
+                    return;
+                }
+                
+                await sendAudioToBackend(audioBlob);
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            statusText.textContent = 'Recording... Click mic to stop';
+            statusText.style.color = '#00ffcc';
+            micBtn.classList.add('listening');
+
+        } catch (err) {
+            console.error('Error accessing microphone:', err);
+            statusText.textContent = 'Microphone access denied or unreadable.';
+            statusText.style.color = '#ff4d4d';
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        isRecording = false;
+        micBtn.classList.remove('listening');
+        statusText.textContent = 'Transcribing locally (OpenAI Whisper)...';
+        statusText.style.color = '#e0e0e0';
+    }
+
+    async function sendAudioToBackend(audioBlob) {
+        recognizedSpeechEl.textContent = 'Processing audio locally with Whisper STT...';
+        recognizedSpeechEl.classList.add('placeholder');
+        chatbotResponseEl.textContent = 'Thinking...';
+        chatbotResponseEl.classList.add('placeholder');
+
+        const formData = new FormData();
+        const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
+        formData.append('audio', audioBlob, `speech.${extension}`);
+
+        try {
+            const response = await fetch('/voice-chat', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `Server error ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Display recognized text
+            recognizedSpeechEl.textContent = data.text || "(No speech detected)";
+            recognizedSpeechEl.classList.remove('placeholder');
+
+            // Display chatbot response
+            chatbotResponseEl.textContent = data.response || "No response provided.";
+            chatbotResponseEl.classList.remove('placeholder');
+            
+            intentBadge.textContent = data.intent || "Unknown";
+            
+            const confidence = data.confidence !== undefined ? (data.confidence * 100).toFixed(1) : 0;
+            confidenceBadge.textContent = `${confidence}%`;
+            
+            statusText.textContent = 'Response Generated (Local STT + DL Model)';
+            statusText.style.color = '#00ffcc';
+            ttsBtn.disabled = false;
+            
+        } catch (error) {
+            console.error('Voice chat error:', error);
+            chatbotResponseEl.textContent = `Error: ${error.message}`;
+            chatbotResponseEl.classList.remove('placeholder');
+            statusText.textContent = 'Processing Error';
+            statusText.style.color = '#ff4d4d';
+        }
+    }
+
+    // Text Input Function (Fallback)
     async function sendMessage(text) {
         if (!text || text.trim() === '') return;
         
         statusText.textContent = 'Processing...';
+        statusText.style.color = '#e0e0e0';
         recognizedSpeechEl.textContent = text;
         recognizedSpeechEl.classList.remove('placeholder');
         
@@ -108,20 +160,19 @@ document.addEventListener('DOMContentLoaded', () => {
             
             intentBadge.textContent = data.intent || "Unknown";
             
-            const confidence = data.confidence ? (data.confidence * 100).toFixed(1) : 0;
+            const confidence = data.confidence !== undefined ? (data.confidence * 100).toFixed(1) : 0;
             confidenceBadge.textContent = `${confidence}%`;
             
-            statusText.textContent = 'Response Generated';
+            statusText.textContent = 'Response Generated (Local Intent Model)';
+            statusText.style.color = '#00ffcc';
             ttsBtn.disabled = false;
-            
-            // Optionally auto-play TTS by un-commenting next line:
-            // speak(data.response);
             
         } catch (error) {
             console.error('Chat error:', error);
             chatbotResponseEl.textContent = `Error: ${error.message}. Is the Flask backend running?`;
             chatbotResponseEl.classList.remove('placeholder');
             statusText.textContent = 'Error occurred';
+            statusText.style.color = '#ff4d4d';
         }
     }
 
@@ -143,8 +194,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Text-to-Speech
-    let lastSpokenText = '';
-    
     function speak(text) {
         if (!('speechSynthesis' in window)) {
             console.warn('Text-to-Speech not supported');
@@ -177,3 +226,4 @@ document.addEventListener('DOMContentLoaded', () => {
         window.speechSynthesis.getVoices();
     }
 });
+

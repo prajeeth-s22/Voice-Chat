@@ -19,6 +19,8 @@ import json
 import os
 import pickle
 import random
+import subprocess
+import tempfile
 
 import numpy as np
 
@@ -28,6 +30,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from flask import Flask, render_template, request, jsonify
 import tensorflow as tf
 from tensorflow import keras
+import whisper
+import imageio_ffmpeg
 
 
 # ─── App Configuration ───────────────────────────────────────────────
@@ -47,15 +51,41 @@ FALLBACK_RESPONSES = [
 ]
 
 
+def load_recording(audio_path):
+    """Decode browser audio to Whisper's required 16 kHz mono float32 format.
+
+    MediaRecorder produces WebM/Opus in most browsers. Librosa cannot
+    reliably open that format on Windows without a separately installed
+    FFmpeg. imageio-ffmpeg ships a compatible FFmpeg binary with the Python
+    dependency, so this works on a clean Windows installation as well.
+    """
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    command = [
+        ffmpeg_exe, '-nostdin', '-loglevel', 'error', '-i', audio_path,
+        '-f', 's16le', '-ac', '1', '-ar', '16000', '-'
+    ]
+    try:
+        completed = subprocess.run(
+            command, check=True, capture_output=True, timeout=60
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError('Audio decoding timed out. Please use a shorter recording.') from exc
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.decode('utf-8', errors='replace').strip()
+        raise ValueError(f'Unable to decode the audio recording: {detail or "unsupported audio format"}') from exc
+
+    return np.frombuffer(completed.stdout, np.int16).astype(np.float32) / 32768.0
+
+
 # ─── Load Model and Artifacts ────────────────────────────────────────
 def load_model_artifacts():
-    """Load the trained model, vectorizer, label encoder, and intents."""
+    """Load the trained model, vectorizer, label encoder, intents, and Whisper STT model."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Load trained Keras model
     model_path = os.path.join(base_dir, 'chatbot_model.keras')
     model = keras.models.load_model(model_path)
-    print(f"[OK] Model loaded from: {model_path}")
+    print(f"[OK] Keras Intent Model loaded from: {model_path}")
 
     # Load TF-IDF vectorizer
     vec_path = os.path.join(base_dir, 'vectorizer.pkl')
@@ -75,22 +105,28 @@ def load_model_artifacts():
         intents_data = json.load(f)
     print(f"[OK] Intents loaded from: {intents_path}")
 
+    # Load local OpenAI Whisper model for Speech Recognition
+    print("[INFO] Loading local OpenAI Whisper STT model (tiny.en)...")
+    whisper_model = whisper.load_model('tiny.en')
+    print("[OK] Local Whisper STT model loaded successfully.")
+
     # Build a lookup: tag -> list of responses
     response_map = {}
     for intent in intents_data['intents']:
         response_map[intent['tag']] = intent['responses']
 
-    return model, vectorizer, label_encoder, response_map
+    return model, vectorizer, label_encoder, response_map, whisper_model
 
 
 # Load everything at startup
 print("\n" + "=" * 50)
 print("  Loading chatbot model and artifacts...")
 print("=" * 50)
-model, vectorizer, label_encoder, response_map = load_model_artifacts()
+model, vectorizer, label_encoder, response_map, whisper_model = load_model_artifacts()
 print("=" * 50)
 print("  Chatbot is ready!")
 print("=" * 50 + "\n")
+
 
 
 # ─── Prediction Function ─────────────────────────────────────────────
@@ -180,11 +216,74 @@ def chat():
         }), 500
 
 
+@app.route('/voice-chat', methods=['POST'])
+def voice_chat():
+    """Handle voice requests by processing audio locally using Whisper STT."""
+    if 'audio' not in request.files and not request.data:
+        return jsonify({'error': 'No audio file provided in request.'}), 400
+
+    temp_path = None
+    try:
+        # Save uploaded audio file to a temporary location
+        suffix = '.wav'
+        if 'audio' in request.files:
+            file = request.files['audio']
+            filename = file.filename or 'speech.wav'
+            ext = os.path.splitext(filename)[1]
+            if ext:
+                suffix = ext
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                file.save(tmp.name)
+                temp_path = tmp.name
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
+                tmp.write(request.data)
+                temp_path = tmp.name
+
+        # Decode WebM/WAV/etc. into the format Whisper expects.
+        audio_data = load_recording(temp_path)
+
+        # Remove temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            temp_path = None
+
+        if len(audio_data) == 0:
+            return jsonify({'error': 'Audio recording was empty. Please try speaking again.'}), 400
+
+        # Transcribe locally using OpenAI Whisper
+        transcription_result = whisper_model.transcribe(audio_data, fp16=False)
+        transcribed_text = transcription_result.get('text', '').strip()
+
+        if not transcribed_text:
+            return jsonify({
+                'text': '',
+                'intent': 'unknown',
+                'confidence': 0.0,
+                'response': "I couldn't hear any clear speech. Please try speaking into your microphone again."
+            })
+
+        # Predict intent using Keras model
+        result = predict_intent(transcribed_text)
+        result['stt_model'] = 'OpenAI Whisper (tiny.en)'
+        return jsonify(result)
+
+    except Exception as e:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        app.logger.error(f"Voice processing error: {str(e)}")
+        return jsonify({'error': f'Voice processing failed: {str(e)}'}), 500
+
+
 # ─── Health Check ─────────────────────────────────────────────────────
 @app.route('/health')
 def health():
     """Simple health check endpoint."""
-    return jsonify({'status': 'ok', 'model_loaded': model is not None})
+    return jsonify({
+        'status': 'ok',
+        'intent_model_loaded': model is not None,
+        'whisper_stt_loaded': whisper_model is not None
+    })
 
 
 # ─── Main ─────────────────────────────────────────────────────────────
